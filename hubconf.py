@@ -2,7 +2,7 @@ import torch
 import os
 from src.models import FNO3d
 
-def PoissonNet(sample_size = 25000):
+def PoissonNet(sample_size = 25000, cuda = True):
     # dirname = os.path.dirname(__file__)
     # checkpoint_dir = os.path.join(dirname, 'weights')
     # filenames = os.listdir(checkpoint_dir)
@@ -28,5 +28,10 @@ def PoissonNet(sample_size = 25000):
         raise ValueError('Sample size {} not supported. Supported sample sizes are: {}'.format(sample_size, filenames.keys()))
     URL = BASE_URL + filenames[sample_size]
     state_dict = torch.hub.load_state_dict_from_url(URL)
-    model = FNO3d.load_state_dict(state_dict)
+    width = 30
+    modes = 10
+    model = FNO3d(modes, modes, modes, width)
+    if cuda:
+        model = model.cuda()
+    model.load_state_dict(state_dict)
     return model
