@@ -1,0 +1,10 @@
+name: poissonnet
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - pytorch >= 1.9.0
+  - trimesh
+  - 
+  - pip:
+    - git+https://github.com/dimatura/binvox-rw-py.git
