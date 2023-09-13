@@ -1,21 +1,13 @@
 import torch
 import os
-from src.models import FNO3d
+from src import models
 
-def PoissonNet(sample_size = 25000, cuda = True):
-    # dirname = os.path.dirname(__file__)
-    # checkpoint_dir = os.path.join(dirname, 'weights')
-    # filenames = os.listdir(checkpoint_dir)
-    # filename = None
-    # for f in filenames:
-    #     if f.startswith('n_samples_' + str(sample_size)):
-    #         filename = f
-    #         break
-    # if filename is None:
-    #     raise ValueError('No checkpoint found for sample size: {}'.format(sample_size))
-    # checkpoint_path = os.path.join(checkpoint_dir, filename)
-    # state_dict = torch.load(checkpoint_path)
-    # model = FNO3d.load_state_dict(state_dict)
+def PoissonNet(**kwargs):
+    poissonnetFNO = PoissonNetFNO(**kwargs)
+    poissonnet = models.PoissonNet(poissonnetFNO)
+    return poissonnet
+    
+def PoissonNetFNO(sample_size = 25000, cuda = True, width = 30, modes = 10):
     BASE_URL = 'https://juliushege.com/files/'
     filenames = {
         5000: 'n_samples_5000_sigma_2',
@@ -27,10 +19,11 @@ def PoissonNet(sample_size = 25000, cuda = True):
     if sample_size not in filenames:
         raise ValueError('Sample size {} not supported. Supported sample sizes are: {}'.format(sample_size, filenames.keys()))
     URL = BASE_URL + filenames[sample_size]
-    state_dict = torch.hub.load_state_dict_from_url(URL)
-    width = 30
-    modes = 10
-    model = FNO3d(modes, modes, modes, width)
+    try:
+        state_dict = torch.hub.load_state_dict_from_url(URL)
+    except:
+        raise ValueError("Could not load model weights, presumably because of the authors' failure to find durable hosting. Try downloading the weights manually from https://drive.google.com/drive/folders/1xQGvyRUg2davxsip1SyNnCkoe0kzeEJM.")
+    model = models.FNO3d(modes, modes, modes, width)
     if cuda:
         model = model.cuda()
     model.load_state_dict(state_dict)

@@ -2,9 +2,103 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-import os
 import torch.nn.functional as F
+import scipy
+from .utils import *
+from skimage.filters import threshold_otsu
+from .saputils import point_rasterize, spec_gaussian_filter
+import math
+import numbers
 
+class GaussianSmoothing(nn.Module):
+    def __init__(self, channels, kernel_size, sigma):
+        super(GaussianSmoothing, self).__init__()
+        if isinstance(kernel_size, numbers.Number):
+            kernel_size = [kernel_size] * 3
+        if isinstance(sigma, numbers.Number):
+            sigma = [sigma] * 3
+
+        # The gaussian kernel is the product of the
+        # gaussian function of each dimension.
+        kernel = 1
+        meshgrids = torch.meshgrid(
+            [
+                torch.arange(size, dtype=torch.float32)
+                for size in kernel_size
+            ]
+        )
+        for size, std, mgrid in zip(kernel_size, sigma, meshgrids):
+            mean = (size - 1) / 2
+            kernel *= 1 / (std * math.sqrt(2 * math.pi)) * \
+                      torch.exp(-((mgrid - mean) / std) ** 2 / 2)
+
+        # Make sure sum of values in gaussian kernel equals 1.
+        kernel = kernel / torch.sum(kernel)
+
+        # Reshape to depthwise convolutional weight
+        kernel = kernel.view(1, 1, *kernel.size())
+        kernel = kernel.repeat(channels, *[1] * (kernel.dim() - 1))
+
+        self.register_buffer('weight', kernel)
+        self.groups = channels
+
+    def forward(self, input):
+        return F.conv3d(input, weight=self.weight, padding='same', groups=self.groups)
+
+class PoissonNet(nn.Module):
+    def __init__(self, FNO, sigma = 1.5):
+        super(PoissonNet, self).__init__()
+        self.FNO = FNO
+        self.smoothing = GaussianSmoothing(1, 5, sigma).to('cuda')
+    
+    def forward(self, points, normals, grid_size = 64):
+        """
+        Parameters:
+        - points (np.ndarray): Input point cloud normalized between [0, 1]. Shape [b, n, 3] for batch size b and n points.
+        - normals (np.ndarray): Normal vectors for each point. Shape [b, n, 3].
+        - grid_size (int, optional): The size of the output grid. Default is 64.
+        - sigma (float, optional): The standard deviation for the Gaussian filter.
+
+        Returns:
+        - np.ndarray: An occupancy grid computed from the divergence of the vector field induced by the input points and normals.
+        """
+        assert normals.shape == points.shape
+        assert points.shape[-1] == 3
+        assert torch.min(points) >= 0
+        assert torch.max(points) <= 1
+        
+        assert len(points.shape) == 3
+
+        # data = np.round(points)
+
+        # field_V = np.zeros((grid_size, grid_size, grid_size, 3)) #Divergence of \overrightarrow{V}
+        # density_tensor_binary = np.zeros((grid_size, grid_size, grid_size)) # Density of points, so we can normalize
+        # for i in range(data.shape[0]):
+        #     density_tensor_binary[round(data[i,0]), round(data[i,1]), round(data[i,2])] += 1
+
+        # density_tensor = scipy.ndimage.filters.gaussian_filter(np.pad(density_tensor_binary,((5,), (5,), (5,))), sigma) #Smoothed density
+        # for i in range(data.shape[0]): 
+        #     field_V[round(data[i,0]), round(data[i,1]), round(data[i,2])] += normals[i] / density_tensor[round(data[i,0]) + 5, round(data[i,1]) + 5, round(data[i,2]) + 5]
+
+        field_V = point_rasterize(points, normals, (grid_size, grid_size, grid_size))
+        divergence_tensor = torch.zeros((field_V.shape[0], field_V.shape[2], field_V.shape[3], field_V.shape[4]), device = points.device)
+        print(field_V.shape)
+        for i in range(3):
+            divergence_tensor += torch.roll(field_V, 1, dims = i)[:,i,:,:,:] - field_V[:,i,:,:,:]
+        # divergence_tensor = scipy.ndimage.filters.gaussian_filter(divergence_tensor,sigma)
+        divergence_tensor = self.smoothing(divergence_tensor.unsqueeze(1)).squeeze(1)
+        print(divergence_tensor.shape)
+        T = T_in = S = divergence_tensor.shape[1]
+        batch_size = divergence_tensor.shape[0]
+        divergence_tensor_resh = divergence_tensor.reshape(batch_size,S,S,1,T_in).repeat([1,1,1,T,1])
+        print(divergence_tensor_resh.shape)
+        pred = self.FNO(divergence_tensor_resh)
+        pred = pred.squeeze(-1)
+        pred = F.sigmoid(pred)
+        
+        return pred
+        
+        
 ################################################################
 # 3d Fourier Neural Operators
 # This is based on the code from the original Li et al. paper:

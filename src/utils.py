@@ -19,7 +19,7 @@ import scipy
 
 import open3d as o3d
 
-import binvox_rw
+from . import binvox_rw
 from skimage import measure
 import random
 
@@ -1265,7 +1265,7 @@ def save_results_benchmarks(voxels, pred_bin, points, path):
     save_prediction_mesh(pred_bin, n_samples, saving_path, path.split('/')[-1].replace('.binvox','')+'_PoissonNet')
     print("Saved results")
 
-def FNO_predict_highres(divergence_tensor_batch,model, batch_size):
+def FNO_predict_highres(divergence_tensor_batch, model, batch_size):
     divergence_tensor_batch = torch.Tensor(divergence_tensor_batch).cuda()
 
     div_normalizer = UnitGaussianNormalizer(divergence_tensor_batch)
