@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.functional as F
 import scipy
-from .utils import *
 from skimage.filters import threshold_otsu
 from .saputils import point_rasterize, spec_gaussian_filter
 import math
