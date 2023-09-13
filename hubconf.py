@@ -4,6 +4,7 @@ from src import models
 
 def PoissonNetFull(**kwargs):
     poissonnetFNO = PoissonNetFNO(**kwargs)
+    smoothing = models.GaussianSmoothing(1, 5, 1)
     poissonnet = models.PoissonNet(poissonnetFNO)
     return poissonnet
     
