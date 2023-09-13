@@ -1,12 +1,10 @@
 import torch
 import os
-#from src import models
-from src.models import PoissonNet as _PoissonNet
-from src.models import FNO3d
+from src import models
 
-def PoissonNet(**kwargs):
+def PoissonNetFull(**kwargs):
     poissonnetFNO = PoissonNetFNO(**kwargs)
-    poissonnet = _PoissonNet(poissonnetFNO)
+    poissonnet = models.PoissonNet(poissonnetFNO)
     return poissonnet
     
 def PoissonNetFNO(sample_size = 25000, cuda = True, width = 30, modes = 10):
@@ -25,7 +23,7 @@ def PoissonNetFNO(sample_size = 25000, cuda = True, width = 30, modes = 10):
         state_dict = torch.hub.load_state_dict_from_url(URL)
     except:
         raise ValueError("Could not load model weights, presumably because of the authors' failure to find durable hosting. Try downloading the weights manually from https://drive.google.com/drive/folders/1xQGvyRUg2davxsip1SyNnCkoe0kzeEJM.")
-    model = FNO3d(modes, modes, modes, width)
+    model = models.FNO3d(modes, modes, modes, width)
     if cuda:
         model = model.cuda()
     model.load_state_dict(state_dict)
