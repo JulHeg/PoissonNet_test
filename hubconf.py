@@ -20,8 +20,8 @@ def PoissonNetFNO(sample_size = 25000, cuda = True, width = 30, modes = 10):
     if sample_size not in filenames:
         raise ValueError('Sample size {} not supported. Supported sample sizes are: {}'.format(sample_size, filenames.keys()))
     URL = BASE_URL + filenames[sample_size]
-        state_dict = torch.hub.load_state_dict_from_url(URL)
-        # If the files don't exist at the URLs any more (sorry!), try downloading the weights manually from https://drive.google.com/drive/folders/1xQGvyRUg2davxsip1SyNnCkoe0kzeEJM.
+    state_dict = torch.hub.load_state_dict_from_url(URL)
+    # If the files don't exist at the URLs any more (sorry!), try downloading the weights manually from https://drive.google.com/drive/folders/1xQGvyRUg2davxsip1SyNnCkoe0kzeEJM.
     model = models.FNO3d(modes, modes, modes, width)
     if cuda:
         model = model.cuda()
