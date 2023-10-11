@@ -8,6 +8,7 @@ from skimage.filters import threshold_otsu
 from .saputils import point_rasterize, spec_gaussian_filter
 import math
 import numbers
+from neuralop.utils import UnitGaussianNormalizer
 
 class GaussianSmoothing(nn.Module):
     def __init__(self, channels, kernel_size, sigma):
@@ -50,6 +51,16 @@ class PoissonNet(nn.Module):
         self.FNO = FNO
         self.smoothing = GaussianSmoothing(1, 5, sigma).to('cuda')
     
+    def rasterize_divergence(self, points, normals, grid_size = 64):
+        field_V = point_rasterize(points, normals, (grid_size, grid_size, grid_size))
+        divergence_tensor = torch.zeros((field_V.shape[0], field_V.shape[2], field_V.shape[3], field_V.shape[4]), device = points.device)
+        print(field_V.shape)
+        for i in range(3):
+            divergence_tensor += torch.roll(field_V, 1, dims = i)[:,i,:,:,:] - field_V[:,i,:,:,:]
+        # divergence_tensor = scipy.ndimage.filters.gaussian_filter(divergence_tensor,sigma)
+        divergence_tensor = self.smoothing(divergence_tensor.unsqueeze(1)).squeeze(1)
+        return divergence_tensor
+    
     def forward(self, points, normals, grid_size = 64):
         """
         Parameters:
@@ -79,22 +90,43 @@ class PoissonNet(nn.Module):
         # for i in range(data.shape[0]): 
         #     field_V[round(data[i,0]), round(data[i,1]), round(data[i,2])] += normals[i] / density_tensor[round(data[i,0]) + 5, round(data[i,1]) + 5, round(data[i,2]) + 5]
 
-        field_V = point_rasterize(points, normals, (grid_size, grid_size, grid_size))
-        divergence_tensor = torch.zeros((field_V.shape[0], field_V.shape[2], field_V.shape[3], field_V.shape[4]), device = points.device)
-        print(field_V.shape)
-        for i in range(3):
-            divergence_tensor += torch.roll(field_V, 1, dims = i)[:,i,:,:,:] - field_V[:,i,:,:,:]
-        # divergence_tensor = scipy.ndimage.filters.gaussian_filter(divergence_tensor,sigma)
-        divergence_tensor = self.smoothing(divergence_tensor.unsqueeze(1)).squeeze(1)
+        divergence_tensor = self.rasterize_divergence(points, normals, grid_size)
+
         print(divergence_tensor.shape)
         T = T_in = S = divergence_tensor.shape[1]
         batch_size = divergence_tensor.shape[0]
-        divergence_tensor_resh = divergence_tensor.reshape(batch_size,S,S,1,T_in).repeat([1,1,1,T,1])
-        print(divergence_tensor_resh.shape)
-        pred = self.FNO(divergence_tensor_resh)
-        pred = pred.squeeze(-1)
-        pred = F.sigmoid(pred)
         
+        
+        # This somewhat works
+        # divergence_tensor_resh = divergence_tensor.reshape(batch_size,S,S,1,T_in).repeat([1,1,1,T,1])
+        # print(divergence_tensor_resh.shape)
+        # pred = self.FNO(divergence_tensor_resh)
+        # pred = pred.squeeze(-1)
+        # pred = F.sigmoid(pred)
+        
+        # print(torch.isnan(divergence_tensor).any())
+        # div_normalizer = UnitGaussianNormalizer(divergence_tensor)
+        # divergence_tensor = div_normalizer.encode(divergence_tensor)
+        # print(torch.isnan(divergence_tensor).any())
+        # divergence_tensor_resh = divergence_tensor.reshape(batch_size,S,S,1,T_in).repeat([1,1,1,T,1])
+        # print(divergence_tensor_resh.shape)
+        # pred = self.FNO(divergence_tensor_resh)
+        # pred = pred.squeeze(-1)
+        # pred = div_normalizer.decode(pred)
+        # pred = torch.sigmoid(pred)
+        
+        # divergence_tensor_batch = divergence_tensor
+        # div_normalizer = UnitGaussianNormalizer(divergence_tensor_batch)
+        # print('std ', div_normalizer.std)
+        # print('mean ', div_normalizer.mean)
+        # divergence_tensor_batch = div_normalizer.encode(divergence_tensor_batch)
+        
+        T = T_in = S = divergence_tensor_batch.shape[1]
+        divergence_tensor_batch_resh = divergence_tensor_batch.reshape(batch_size,S,S,1,T_in).repeat([1,1,1,T,1])
+        
+        pred = self.FNO(divergence_tensor_batch_resh).view(batch_size, S, S, T)
+        pred = div_normalizer.decode(pred)
+        pred = torch.sigmoid(pred)
         return pred
         
         
